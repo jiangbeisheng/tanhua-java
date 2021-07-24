@@ -1,8 +1,8 @@
 package com.tanhua.sso.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.tanhua.sso.mapper.UserMapper;
-import com.tanhua.sso.pojo.User;
+import com.tanhua.common.mapper.UserMapper;
+import com.tanhua.common.pojo.User;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
