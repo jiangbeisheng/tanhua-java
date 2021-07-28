@@ -6,12 +6,14 @@ import lombok.NoArgsConstructor;
 import org.bson.types.ObjectId;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.io.Serializable;
+
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "tanhua_users")
-public class Users {
+public class Users implements Serializable {
 
     private static final long serialVersionUID = 6003135946820874230L;
     private ObjectId id;

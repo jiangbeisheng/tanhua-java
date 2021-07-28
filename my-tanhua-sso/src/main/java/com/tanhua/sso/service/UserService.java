@@ -1,8 +1,10 @@
 package com.tanhua.sso.service;
 
+import com.alibaba.dubbo.config.annotation.Reference;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.tanhua.common.mapper.UserMapper;
 import com.tanhua.common.pojo.User;
+import com.tanhua.dubbo.server.api.HuanXinApi;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -14,9 +16,12 @@ import org.joda.time.DateTime;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.MessagingException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.GetMapping;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -37,6 +42,8 @@ public class UserService {
     @Autowired
     private RocketMQTemplate rocketMQTemplate;
 
+    @Reference(version = "1.0.0")
+    private HuanXinApi huanXinApi;
 
     /**
      * 用户登录
@@ -68,10 +75,15 @@ public class UserService {
             user = new User();
             user.setMobile(phone);
             user.setPassword(DigestUtils.md5Hex("123456"));
-
             //注册新用户
             this.userMapper.insert(user);
             isNew = true;
+
+            //将该用户信息注册到环信平台
+            Boolean register = this.huanXinApi.register(user.getId());
+            if (!register){
+                log.error("注册环信平台失败!"+user.getId());
+            }
         }
 
         //生成token
@@ -137,5 +149,15 @@ public class UserService {
             log.error("token不合法！ token = "+ token, e);
         }
         return null;
+    }
+
+    /**
+     * TODO：谁看过我
+     *
+     * @return
+     */
+    @GetMapping("visitors")
+    public ResponseEntity<Object> queryVisitors() {
+        return ResponseEntity.ok(Collections.EMPTY_LIST);
     }
 }

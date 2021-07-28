@@ -36,9 +36,6 @@ public class testQueryPublishList {
 
         System.out.println(this.quanZiApi.likeComment(userId,publishId));
         System.out.println(this.quanZiApi.disLikeComment(userId,publishId));
-        System.out.println(this.quanZiApi.queryLikeComment(publishId));
+        System.out.println(this.quanZiApi.queryLikeCount(publishId));
     }
-
-
-
 }

@@ -1,5 +1,6 @@
 package com.tanhua.dubbo.server.api;
 
+import com.tanhua.dubbo.server.pojo.Comment;
 import com.tanhua.dubbo.server.pojo.Publish;
 import com.tanhua.dubbo.server.vo.PageInfo;
 
@@ -64,7 +65,7 @@ public interface QuanZiApi {
      * @param publishId
      * @return
      */
-    Long queryLikeComment(String publishId);
+    Long queryLikeCount(String publishId);
 
     /**
      * 查询用户是否点赞该动态
@@ -74,4 +75,98 @@ public interface QuanZiApi {
      * @return
      */
     Boolean queryUserIsLike(Long userId,String publishId);
+
+    /**
+     * 喜欢
+     *
+     * @param userId
+     * @param publishId
+     * @return
+     */
+    Boolean loveComment(Long userId, String publishId);
+
+    /**
+     * 取消喜欢
+     *
+     * @param userId
+     * @param publishId
+     * @return
+     */
+    Boolean disLoveComment(Long userId, String publishId);
+
+    /**
+     * 查询喜欢数
+     *
+     * @param publishId
+     * @return
+     */
+    Long queryLoveCount(String publishId);
+
+    /**
+     * 查询用户是否喜欢该动态
+     *
+     * @param userId
+     * @param publishId
+     * @return
+     */
+    Boolean queryUserIsLove(Long userId, String publishId);
+
+    /**
+     * 查询评论
+     *
+     * @return
+     */
+    PageInfo<Comment> queryCommentList(String publishId, Integer page, Integer pageSize);
+
+    /**
+     * 发表评论
+     *
+     * @param userId
+     * @param publishId
+     * @param content
+     * @return
+     */
+    Boolean saveComment(Long userId, String publishId, String content);
+
+    /**
+     * 查询评论数
+     *
+     * @param publishId
+     * @return
+     */
+    Long queryCommentCount(String publishId);
+
+    /**
+     * 查询对我的点赞消息列表
+     *
+     * @return
+     */
+    PageInfo<Comment> queryLikeCommentListByUser(Long userId, Integer page, Integer pageSize);
+
+    /**
+     * 查询对我的喜欢消息列表
+     *
+     * @return
+     */
+    PageInfo<Comment> queryLoveCommentListByUser(Long userId, Integer page, Integer pageSize);
+
+    /**
+     * 查询对我的评论消息列表
+     *
+     * @return
+     */
+    PageInfo<Comment> queryCommentListByUser(Long userId, Integer page, Integer pageSize);
+
+
+    /**
+     * 查询相册表
+     *
+     * @param userId
+     * @param page
+     * @param pageSize
+     * @return
+     */
+    PageInfo<Publish> queryAlbumList(Long userId, Integer page, Integer pageSize);
+
+
 }

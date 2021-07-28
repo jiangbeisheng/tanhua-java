@@ -25,7 +25,6 @@ public class TodayBestController {
 
     /**
      * 查询今日佳人
-     * @param token
      * @return
      */
     @GetMapping("todayBest")

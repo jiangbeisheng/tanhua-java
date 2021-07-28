@@ -12,7 +12,6 @@ import com.tanhua.dubbo.server.pojo.*;
 import com.tanhua.dubbo.server.service.IdService;
 import com.tanhua.dubbo.server.service.TimeLineService;
 import com.tanhua.dubbo.server.vo.PageInfo;
-import jdk.jfr.ContentType;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,6 +51,9 @@ public class QuanZiApiImpl implements QuanZiApi{
 
     @Autowired
     private RedisTemplate<String,String> redisTemplate;
+
+    @Autowired
+    private VideoApi videoApi;
 
     @Override
     public PageInfo<Publish> queryPublishList(Long userId, Integer page, Integer pageSize) {
@@ -220,7 +222,7 @@ public class QuanZiApiImpl implements QuanZiApi{
     }
 
     @Override
-    public Long queryLikeComment(String publishId) {
+    public Long queryLikeCount(String publishId) {
         //从redis中命中查询,如果命中直接返回即可
         String redisKey =  this.getCommentRedisKeyPrefix(publishId);
         String hashKey = CommentType.LIKE.toString();
@@ -232,8 +234,6 @@ public class QuanZiApiImpl implements QuanZiApi{
         Long count = this.queryCommentCount(publishId, CommentType.LIKE);
         //写入redis 中
         this.redisTemplate.opsForHash().put(redisKey, hashKey,String.valueOf(count));
-
-
         return count;
     }
 
@@ -277,14 +277,40 @@ public class QuanZiApiImpl implements QuanZiApi{
             comment.setContent(content);
             comment.setCreated(System.currentTimeMillis());
             Publish publish = this.queryPublishById(publishId);
-            //TODO 其他评论对象暂不处理
-            comment.setPublishUserId(publish.getUserId());
+            if (ObjectUtil.isNotEmpty(publish)){
+                comment.setPublishUserId(publish.getUserId());
+            }else {
+                //查询评论
+              Comment myComment=  this.queryCommentById(publishId);
+              if (ObjectUtil.isNotEmpty(myComment)){
+                  comment.setPublishUserId(myComment.getUserId());
+              }else {
+                  //查询小视频
+                  Video video =this.videoApi.queryVideoById(publishId);
+                  if (ObjectUtil.isNotEmpty(video)){
+                      comment.setPublishUserId(video.getUserId());
+                  }else {
+                      //其他情况,直接返回
+                      return false;
+                  }
+              }
+            }
+
             this.mongoTemplate.save(comment);
             return true;
         } catch (Exception e) {
             log.error("保存comment出错 userId="+userId+",publishId="+publishId+",commentType="+commentType,e);
         }
         return false;
+    }
+
+    /**
+     * 根据id查询comment对象
+     * @param publishId
+     * @return
+     */
+    private Comment queryCommentById(String publishId) {
+        return this.mongoTemplate.findById(new ObjectId(publishId), Comment.class);
     }
 
     /**
@@ -312,5 +338,201 @@ public class QuanZiApiImpl implements QuanZiApi{
         Query query = Query.query(Criteria.where("publishId").is(new ObjectId(publishId)).and("commentType")
                 .is(commentType.getType()));
         return this.mongoTemplate.count(query,Comment.class);
+    }
+
+    @Override
+    public Boolean loveComment(Long userId, String publishId) {
+        //查询该用户是否已经喜欢
+        if (this.queryUserIsLove(userId, publishId)) {
+            return false;
+        }
+
+        //喜欢
+        boolean result = this.saveComment(userId, publishId, CommentType.LOVE, null);
+        if (!result) {
+            return false;
+        }
+
+        //喜欢成功后，修改Redis中的总的喜欢数
+        String redisKey = this.getCommentRedisKeyPrefix(publishId);
+        String hashKey = CommentType.LOVE.toString();
+        this.redisTemplate.opsForHash().increment(redisKey, hashKey, 1);
+
+        //标记用户已经喜欢
+        hashKey = this.getCommentUserLoveRedisKey(userId);
+        this.redisTemplate.opsForHash().put(redisKey, hashKey, "1");
+        return true;
+    }
+
+    private String getCommentUserLoveRedisKey(Long userId) {
+        return COMMENT_USER_LOVE_REDIS_KEY_PREFIX + userId;
+    }
+
+    @Override
+    public Boolean disLoveComment(Long userId, String publishId) {
+        if (!this.queryUserIsLove(userId, publishId)) {
+            //如果用户没有喜欢，就直接返回
+            return false;
+        }
+
+        boolean result = this.removeComment(userId, publishId, CommentType.LOVE);
+        if (!result) {
+            //删除失败
+            return false;
+        }
+
+        //删除redis中的记录
+        String redisKey = this.getCommentRedisKeyPrefix(publishId);
+        String hashKey = this.getCommentUserLoveRedisKey(userId);
+        this.redisTemplate.opsForHash().delete(redisKey, hashKey);
+        this.redisTemplate.opsForHash().increment(redisKey, CommentType.LOVE.toString(), -1);
+
+        return true;
+    }
+
+    @Override
+    public Long queryLoveCount(String publishId) {
+        //首先从redis中命中，如果命中的话就返回，没有命中就查询Mongodb
+        String redisKey = this.getCommentRedisKeyPrefix(publishId);
+        String hashKey = CommentType.LOVE.toString();
+        Object value = this.redisTemplate.opsForHash().get(redisKey, hashKey);
+        if (ObjectUtil.isNotEmpty(value)) {
+            return Convert.toLong(value);
+        }
+
+        //查询count
+        Long count = this.queryCommentCount(publishId, CommentType.LOVE);
+        //存储到redis中
+        this.redisTemplate.opsForHash().put(redisKey, hashKey, String.valueOf(count));
+        return count;
+    }
+
+    @Override
+    public Boolean queryUserIsLove(Long userId, String publishId) {
+        String redisKey = this.getCommentRedisKeyPrefix(publishId);
+        String hashKey = this.getCommentUserLoveRedisKey(userId);
+        Object value = this.redisTemplate.opsForHash().get(redisKey, hashKey);
+        if (ObjectUtil.isNotEmpty(value)) {
+            return StrUtil.equals(Convert.toStr(value), "1");
+        }
+
+        //查询mongodb
+        Query query = Query.query(Criteria.where("publishId")
+                .is(new ObjectId(publishId))
+                .and("userId").is(userId)
+                .and("commentType").is(CommentType.LOVE.getType()));
+        long count = this.mongoTemplate.count(query, Comment.class);
+        if (count == 0) {
+            return false;
+        }
+
+        //标记用户已经喜欢
+        this.redisTemplate.opsForHash().put(redisKey, hashKey, "1");
+
+        return true;
+    }
+
+    /**
+     * 查询评论列表
+     *
+     * @param publishId
+     * @param page
+     * @param pageSize
+     * @return
+     */
+    @Override
+    public PageInfo<Comment> queryCommentList(String publishId, Integer page, Integer pageSize) {
+        PageRequest pageRequest = PageRequest.of(page - 1, pageSize, Sort.by(Sort.Order.asc("created")));
+
+        Query query = new Query(Criteria
+                .where("publishId").is(new ObjectId(publishId))
+                .and("commentType").is(CommentType.COMMENT.getType())).with(pageRequest);
+
+        //查询评论列表
+        List<Comment> commentList = this.mongoTemplate.find(query, Comment.class);
+
+        PageInfo<Comment> pageInfo = new PageInfo<>();
+        pageInfo.setPageNum(page);
+        pageInfo.setPageSize(pageSize);
+        pageInfo.setRecords(commentList);
+        return pageInfo;
+    }
+
+    /**
+     * 发表评论
+     *
+     * @param userId
+     * @param publishId
+     * @param content
+     * @return
+     */
+    @Override
+    public Boolean saveComment(Long userId, String publishId, String content) {
+        return this.saveComment(userId, publishId, CommentType.COMMENT, content);
+    }
+
+    @Override
+    public Long queryCommentCount(String publishId) {
+        return this.queryCommentCount(publishId,CommentType.COMMENT);
+    }
+
+    @Override
+    public PageInfo<Comment> queryLikeCommentListByUser(Long userId, Integer page, Integer pageSize) {
+        return this.queryCommentListByUser(userId, CommentType.LIKE, page, pageSize);
+
+    }
+
+    @Override
+    public PageInfo<Comment> queryLoveCommentListByUser(Long userId, Integer page, Integer pageSize) {
+        return this.queryCommentListByUser(userId, CommentType.LOVE, page, pageSize);
+    }
+
+    @Override
+    public PageInfo<Comment> queryCommentListByUser(Long userId, Integer page, Integer pageSize) {
+        return this.queryCommentListByUser(userId, CommentType.COMMENT, page, pageSize);
+    }
+
+    private PageInfo<Comment> queryCommentListByUser(Long userId, CommentType commentType,Integer page, Integer pageSize){
+        PageRequest pageRequest = PageRequest.of(page - 1, pageSize, Sort.by(Sort.Order.desc("created")));
+
+        Query query = Query.query(Criteria.where("publishUserId").is(userId)
+                .and("commentType").is(commentType.getType())).with(pageRequest);
+
+        List<Comment> commentList = this.mongoTemplate.find(query, Comment.class);
+        PageInfo<Comment> pageInfo = new PageInfo<>();
+        pageInfo.setPageNum(page);
+        pageInfo.setPageSize(pageSize);
+        pageInfo.setRecords(commentList);
+        return pageInfo;
+    }
+
+    @Override
+    public PageInfo<Publish> queryAlbumList(Long userId, Integer page, Integer pageSize) {
+
+        PageInfo<Publish> pageInfo = new PageInfo<>();
+        pageInfo.setPageNum(page);
+        pageInfo.setPageSize(pageSize);
+
+        PageRequest pageRequest = PageRequest.of(page - 1 , pageSize,
+                Sort.by(Sort.Order.desc("created")));
+        Query query = new Query().with(pageRequest);
+
+        //查询自己的相册表
+        List<Album> albumList = this.mongoTemplate.find(query, Album.class, "quanzi_album_" + userId);
+
+        if(CollUtil.isEmpty(albumList)){
+            return pageInfo;
+        }
+
+        List<Object> publishIdList = CollUtil.getFieldValues(albumList, "publishId");
+
+        Query queryPublish = Query.query(Criteria.where("id").in(publishIdList))
+                .with(Sort.by(Sort.Order.desc("created")));
+
+        List<Publish> publishList = this.mongoTemplate.find(queryPublish, Publish.class);
+
+        pageInfo.setRecords(publishList);
+
+        return pageInfo;
     }
 }

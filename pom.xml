@@ -11,6 +11,8 @@
         <module>my-tanhua-dubbo/my-tanhua-dubbo-interface</module>
         <module>my-tanhua-dubbo/my-tanhua-dubbo-service</module>
         <module>my-tanhua-common</module>
+        <module>my-tanhua-dubbo/my-tanhua-dubbo-huanxin</module>
+        <module>my-tanhua-dubbo/my-tanhua-dubbo-es</module>
     </modules>
 
     <parent>

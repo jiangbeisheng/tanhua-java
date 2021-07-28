@@ -2,6 +2,7 @@ package com.tanhua.dubbo.server.pojo;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.bson.types.ObjectId;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -11,6 +12,7 @@ import java.io.Serializable;
 
 @Data
 @AllArgsConstructor
+@NoArgsConstructor
 @Document(collection = "recommend_user")
 public class RecommendUser implements Serializable {
     private static final long serialVersionUID = -4296017160071130962L;

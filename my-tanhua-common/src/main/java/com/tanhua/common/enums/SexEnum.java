@@ -17,7 +17,7 @@ public enum SexEnum implements IEnum<Integer> {
 
     @Override
     public Integer getValue() {
-        return null;
+        return this.value;
     }
 
     @Override

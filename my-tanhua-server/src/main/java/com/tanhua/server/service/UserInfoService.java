@@ -42,4 +42,10 @@ public class UserInfoService {
         queryWrapper.in("user_id", userIdList);
         return this.queryUserInfoList(queryWrapper);
     }
+
+    public Boolean updateUserInfoByUserId(UserInfo userInfo) {
+        QueryWrapper<UserInfo> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("user_id", userInfo.getUserId());
+        return this.userInfoMapper.update(userInfo, queryWrapper) > 0;
+    }
 }

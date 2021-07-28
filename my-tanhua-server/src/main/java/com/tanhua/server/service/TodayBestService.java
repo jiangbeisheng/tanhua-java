@@ -56,7 +56,7 @@ public class TodayBestService {
             return null;
         }
         todayBest.setAvatar(userInfo.getLogo());
-        todayBest.setNickName(userInfo.getNickName());
+        todayBest.setNickname(userInfo.getNickName());
         todayBest.setTags(StringUtils.split(userInfo.getTags(), ','));
         if (null==userInfo.getSex()){
             todayBest.setGender("unknown");
@@ -122,7 +122,7 @@ public class TodayBestService {
 
             todayBest.setId(userInfo.getId());
             todayBest.setAvatar(userInfo.getLogo());
-            todayBest.setNickName(userInfo.getNickName());
+            todayBest.setNickname(userInfo.getNickName());
             todayBest.setTags(StringUtils.split(userInfo.getTags(),','));
             if (null==userInfo.getSex()){
                 todayBest.setGender("unknown");

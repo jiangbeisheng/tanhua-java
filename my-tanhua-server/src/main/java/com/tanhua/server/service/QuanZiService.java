@@ -3,6 +3,9 @@ package com.tanhua.server.service;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.convert.Convert;
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.ObjectUtil;
 import com.alibaba.dubbo.config.annotation.Reference;
 import com.tanhua.common.pojo.User;
 import com.tanhua.common.pojo.UserInfo;
@@ -11,19 +14,22 @@ import com.tanhua.common.utils.RelativeDateFormat;
 import com.tanhua.common.utils.UserThreadLocal;
 import com.tanhua.common.vo.PicUploadResult;
 import com.tanhua.dubbo.server.api.QuanZiApi;
+import com.tanhua.dubbo.server.api.VisitorsApi;
+import com.tanhua.dubbo.server.pojo.Comment;
 import com.tanhua.dubbo.server.pojo.Publish;
+import com.tanhua.dubbo.server.pojo.Visitors;
 import com.tanhua.dubbo.server.vo.PageInfo;
+import com.tanhua.server.vo.CommentVo;
 import com.tanhua.server.vo.PageResult;
 import com.tanhua.server.vo.QuanZiVo;
+import com.tanhua.server.vo.VisitorsVo;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 @Service
 @Slf4j
@@ -40,6 +46,9 @@ public class QuanZiService {
 
     @Autowired
     private PicUploadService picUploadService;
+
+    @Reference(version = "1.0.0")
+    private VisitorsApi visitorsApi;
 
     public PageResult queryPublishList(Integer page, Integer pageSize) {
         // 通过dubbo中的服务查询好友动态
@@ -99,13 +108,14 @@ public class QuanZiService {
         }
 
         quanZiVo.setTags(StringUtils.split(userInfo.getTags(), ","));
+        User user = UserThreadLocal.get();
 
         quanZiVo.setCommentCount(0); //TODO 评论数
         quanZiVo.setDistance("1.2公里"); //TODO 距离
-        quanZiVo.setHasLiked(0); //TODO 是否点赞（1是，0否）
-        quanZiVo.setLikeCount(0); //TODO 点赞数
-        quanZiVo.setHasLoved(0); //TODO 是否喜欢（1是，0否）
-        quanZiVo.setLoveCount(0); //TODO 喜欢数
+        quanZiVo.setHasLiked(this.quanZiApi.queryUserIsLike(user.getId(),quanZiVo.getId())?1:0); //是否点赞
+        quanZiVo.setLikeCount(Convert.toInt(this.quanZiApi.queryLikeCount(quanZiVo.getId()))); //点赞数
+        quanZiVo.setHasLoved(this.quanZiApi.queryUserIsLike(user.getId(),quanZiVo.getId())?1:0); //是否喜欢（1是，0否）
+        quanZiVo.setLoveCount(Convert.toInt(this.quanZiApi.queryLoveCount(quanZiVo.getId()))); // 喜欢数
     }
 
     /**
@@ -190,5 +200,182 @@ public class QuanZiService {
         return quanZiVoList;
     }
 
+    /**
+     * 动态点赞
+     *
+     * @param publishId
+     * @return
+     */
+    public Long likeComment(String publishId) {
+        User user = UserThreadLocal.get();
 
+        Boolean result = this.quanZiApi.likeComment(user.getId(), publishId);
+        if (result){
+            //查询点赞数
+            return this.quanZiApi.queryLikeCount(publishId);
+        }
+        return null;
+    }
+
+    /**
+     * 动态取消点赞
+     *
+     * @param publishId
+     * @return
+     */
+    public Long disLikeComment(String publishId) {
+        User user = UserThreadLocal.get();
+
+        Boolean result = this.quanZiApi.disLikeComment(user.getId(), publishId);
+        if (result){
+            //查询点赞数
+            return this.quanZiApi.queryLikeCount(publishId);
+        }
+        return null;
+    }
+
+    public Long loveComment(String publishId) {
+        User user = UserThreadLocal.get();
+        //喜欢
+        Boolean result = this.quanZiApi.loveComment(user.getId(), publishId);
+        if(result){
+            //查询喜欢数
+            return this.quanZiApi.queryLoveCount(publishId);
+        }
+        return null;
+    }
+
+    public Long disLoveComment(String publishId) {
+        User user = UserThreadLocal.get();
+        //取消喜欢
+        Boolean result = this.quanZiApi.disLoveComment(user.getId(), publishId);
+        if(result){
+            //查询喜欢数
+            return this.quanZiApi.queryLoveCount(publishId);
+        }
+        return null;
+    }
+
+    public QuanZiVo queryById(String publishId) {
+        Publish publish = this.quanZiApi.queryPublishById(publishId);
+        if (publish == null) {
+            return null;
+        }
+        return this.fillQuanZiVo(Arrays.asList(publish)).get(0);
+    }
+
+    /**
+     * 查询评论列表
+     *
+     * @param publishId
+     * @param page
+     * @param pageSize
+     * @return
+     */
+    public PageResult queryCommentList(String publishId, Integer page, Integer pageSize) {
+        PageResult pageResult = new PageResult();
+        pageResult.setPage(page);
+        pageResult.setPagesize(pageSize);
+        User user = UserThreadLocal.get();
+
+        //查询评论列表数据
+        PageInfo<Comment> pageInfo = this.quanZiApi.queryCommentList(publishId, page, pageSize);
+        List<Comment> records = pageInfo.getRecords();
+        if (CollUtil.isEmpty(records)){
+            return pageResult;
+        }
+
+        //查询用户信息
+        List<Object> userIdList = CollUtil.getFieldValues(records, "userId");
+        List<UserInfo> userInfoList = this.userInfoService.queryUserInfoByUserIdList(userIdList);
+        List<CommentVo> result = new ArrayList<>();
+        for (Comment record : records) {
+            CommentVo commentVo = new CommentVo();
+            commentVo.setContent(record.getContent());
+            commentVo.setId(record.getId().toHexString());
+            commentVo.setCreateDate(DateUtil.format(new Date(record.getCreated()),"HH-mm"));
+            //是否点赞
+            commentVo.setHasLiked(this.quanZiApi.queryUserIsLike(user.getId(), commentVo.getId())?1:0);
+            //点赞数
+            commentVo.setLikeCount(Convert.toInt(this.quanZiApi.queryLikeCount(commentVo.getId())));
+
+
+            for (UserInfo userInfo : userInfoList) {
+                if (ObjectUtil.equal(record.getUserId(),userInfo.getUserId())){
+                    commentVo.setAvatar(userInfo.getLogo());
+                    commentVo.setNickname(userInfo.getNickName());
+                    break;
+                }
+            }
+            result.add(commentVo);
+        }
+
+        pageResult.setItems(result);
+        return pageResult;
+    }
+
+    /**
+     * 发布评论
+     * @param publishId
+     * @param content
+     * @return
+     */
+    public Boolean saveComments(String publishId, String content) {
+        User user = UserThreadLocal.get();
+
+        return this.quanZiApi.saveComment(user.getId(),publishId,content);
+    }
+
+    public PageResult queryAlbumList(Long userId, Integer page, Integer pageSize) {
+        PageResult pageResult = new PageResult();
+        pageResult.setPage(page);
+        pageResult.setPagesize(pageSize);
+
+        //查询数据
+        PageInfo<Publish> pageInfo = this.quanZiApi.queryAlbumList(userId, page, pageSize);
+        if(CollUtil.isEmpty(pageInfo.getRecords())){
+            return pageResult;
+        }
+
+        //填充数据
+        pageResult.setItems(this.fillQuanZiVo(pageInfo.getRecords()));
+
+        return pageResult;
+    }
+
+    public List<VisitorsVo> queryVisitorsList() {
+
+        User user = UserThreadLocal.get();
+        List<Visitors> visitorsList = this.visitorsApi.queryMyVisitor(user.getId());
+        if (CollUtil.isEmpty(visitorsList)) {
+            return Collections.emptyList();
+        }
+
+        List<Object> userIds = CollUtil.getFieldValues(visitorsList, "visitorUserId");
+        List<UserInfo> userInfoList = this.userInfoService.queryUserInfoByUserIdList(userIds);
+
+        List<VisitorsVo> visitorsVoList = new ArrayList<>();
+
+        for (Visitors visitor : visitorsList) {
+            for (UserInfo userInfo : userInfoList) {
+                if (ObjectUtil.equals(visitor.getVisitorUserId(), userInfo.getUserId())) {
+
+                    VisitorsVo visitorsVo = new VisitorsVo();
+                    visitorsVo.setAge(userInfo.getAge());
+                    visitorsVo.setAvatar(userInfo.getLogo());
+                    visitorsVo.setGender(userInfo.getSex().name().toLowerCase());
+                    visitorsVo.setId(userInfo.getUserId());
+                    visitorsVo.setNickname(userInfo.getNickName());
+                    visitorsVo.setTags(StringUtils.split(userInfo.getTags(), ','));
+                    visitorsVo.setFateValue(visitor.getScore().intValue());
+
+                    visitorsVoList.add(visitorsVo);
+                    break;
+                }
+            }
+        }
+
+        return visitorsVoList;
+
+    }
 }
