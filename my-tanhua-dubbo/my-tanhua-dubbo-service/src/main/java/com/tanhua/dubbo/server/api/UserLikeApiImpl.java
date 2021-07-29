@@ -5,8 +5,11 @@ import cn.hutool.core.collection.ListUtil;
 import cn.hutool.core.convert.Convert;
 import com.alibaba.dubbo.config.annotation.Service;
 import com.tanhua.dubbo.server.pojo.UserLike;
+import com.tanhua.dubbo.server.vo.PageInfo;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -97,7 +100,7 @@ public class UserLikeApiImpl implements UserLikeApi {
      * @param likeUserId
      * @return
      */
-    private Boolean isLike(Long userId, Long likeUserId){
+    public Boolean isLike(Long userId, Long likeUserId){
         String redisKey = this.getLikeRedisKey(userId);
         String hashKey = String.valueOf(likeUserId);
         return this.redisTemplate.opsForHash().hasKey(redisKey, hashKey);
@@ -110,7 +113,7 @@ public class UserLikeApiImpl implements UserLikeApi {
      * @param likeUserId
      * @return
      */
-    private Boolean isNotLike(Long userId, Long likeUserId){
+    public Boolean isNotLike(Long userId, Long likeUserId){
         String redisKey = this.getNotLikeRedisKey(userId);
         String hashKey = String.valueOf(likeUserId);
         return this.redisTemplate.opsForHash().hasKey(redisKey, hashKey);
@@ -178,5 +181,86 @@ public class UserLikeApiImpl implements UserLikeApi {
         keys.forEach(o -> result.add(Convert.toLong(o)));
         return result;
     }
-}
+
+    //com.tanhua.dubbo.server.api.UserLikeApiImpl
+
+    /**
+     * 查询相互喜欢数
+     * 实现2种方式：第一种：查询redis，第二种：查询MongoDB
+     * 建议：优先使用redis查询，其次考虑使用Mongodb
+     *
+     * @param userId
+     * @return
+     */
+    @Override
+    public Long queryMutualLikeCount(Long userId) {
+        //查询我的喜欢列表
+        List<Long> likeUserIdList = this.queryLikeList(userId);
+
+        Long count = 0L;
+        for (Long likeUserId : likeUserIdList) {
+            String redisKey = this.getLikeRedisKey(likeUserId);
+            String hashKey = String.valueOf(userId);
+            //“别人” 的喜欢列表中是否有 “我”
+            if (this.redisTemplate.opsForHash().hasKey(redisKey, hashKey)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    @Override
+    public Long queryLikeCount(Long userId) {
+        String redisKey = this.getLikeRedisKey(userId);
+        return this.redisTemplate.opsForHash().size(redisKey);
+    }
+
+    @Override
+    public Long queryFanCount(Long userId) {
+        //无法通过redis查询完成，必须从Mongodb中查询
+        Query query = Query.query(Criteria.where("likeUserId").is(userId));
+        return this.mongoTemplate.count(query, UserLike.class);
+    }
+
+
+    @Override
+    public PageInfo<UserLike> queryMutualLikeList(Long userId, Integer page, Integer pageSize) {
+        //查询我的喜欢列表
+        List<Long> userLikeIdList = this.queryLikeList(userId);
+
+        //查询喜欢我的人
+        Query query = Query.query(Criteria.where("userId").in(userLikeIdList)
+                .and("likeUserId").is(userId)
+        );
+
+        return this.queryList(query, page, pageSize);
+    }
+
+    @Override
+    public PageInfo<UserLike> queryLikeList(Long userId, Integer page, Integer pageSize) {
+        Query query = Query.query(Criteria.where("userId").is(userId));
+        return this.queryList(query, page, pageSize);
+    }
+
+    @Override
+    public PageInfo<UserLike> queryFanList(Long userId, Integer page, Integer pageSize) {
+        Query query = Query.query(Criteria.where("likeUserId").is(userId));
+        return this.queryList(query, page, pageSize);
+    }
+
+    private PageInfo<UserLike> queryList(Query query, Integer page, Integer pageSize) {
+        //设置分页
+        PageRequest pageRequest = PageRequest.of(page - 1, pageSize,
+                Sort.by(Sort.Order.desc("created")));
+        query.with(pageRequest);
+
+        List<UserLike> userLikeList = this.mongoTemplate.find(query, UserLike.class);
+
+        PageInfo<UserLike> pageInfo = new PageInfo<>();
+        pageInfo.setPageNum(page);
+        pageInfo.setPageSize(pageSize);
+        pageInfo.setRecords(userLikeList);
+
+        return pageInfo;
+}}
 

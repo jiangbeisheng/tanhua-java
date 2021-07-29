@@ -6,6 +6,7 @@ import cn.hutool.core.util.ObjectUtil;
 import com.alibaba.dubbo.config.annotation.Service;
 import com.tanhua.dubbo.server.pojo.RecommendUser;
 import com.tanhua.dubbo.server.pojo.Visitors;
+import com.tanhua.dubbo.server.vo.PageInfo;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -98,6 +99,49 @@ public class VisitorsApiImpl implements VisitorsApi {
         }
 
         return visitorsList;
+    }
+
+    private List<Visitors> queryList(Query query, Long userId){
+        List<Visitors> visitorsList = this.mongoTemplate.find(query, Visitors.class);
+        //查询每个来访用户的得分
+        for (Visitors visitors : visitorsList) {
+
+            Query queryScore = Query.query(Criteria.where("toUserId")
+                    .is(userId).and("userId").is(visitors.getVisitorUserId())
+            );
+            RecommendUser recommendUser = this.mongoTemplate.findOne(queryScore, RecommendUser.class);
+            if(ObjectUtil.isNotEmpty(recommendUser)){
+                visitors.setScore(recommendUser.getScore());
+            }else {
+                //默认得分
+                visitors.setScore(90d);
+            }
+        }
+
+        return visitorsList;
+    }
+
+
+
+    @Override
+    public PageInfo<Visitors> topVisitor(Long userId, Integer page, Integer pageSize) {
+        PageRequest pageRequest = PageRequest.of(page - 1, pageSize,
+                Sort.by(Sort.Order.desc("date")));
+        Query query = Query.query(Criteria.where("userId").is(userId)).with(pageRequest);
+        List<Visitors> visitorsList = this.queryList(query, userId);
+
+        PageInfo<Visitors> pageInfo = new PageInfo<>();
+        pageInfo.setPageNum(page);
+        pageInfo.setPageSize(pageSize);
+        pageInfo.setRecords(visitorsList);
+
+        //记录当前的时间到redis中，在首页查询时，就可以在这个时间之后查询了
+        String redisKey = VISITOR_REDIS_KEY;
+        String hashKey = String.valueOf(userId);
+        String value = String.valueOf(System.currentTimeMillis());
+        this.redisTemplate.opsForHash().put(redisKey, hashKey, value);
+
+        return pageInfo;
     }
 }
 

@@ -6,6 +6,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.convert.Convert;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
 import com.alibaba.dubbo.config.annotation.Reference;
 import com.tanhua.common.pojo.User;
 import com.tanhua.common.pojo.UserInfo;
@@ -49,6 +50,9 @@ public class QuanZiService {
 
     @Reference(version = "1.0.0")
     private VisitorsApi visitorsApi;
+
+    @Autowired
+    private QuanziMQService quanziMQService;
 
     public PageResult queryPublishList(Integer page, Integer pageSize) {
         // 通过dubbo中的服务查询好友动态
@@ -153,7 +157,14 @@ public class QuanZiService {
         }
 
         publish.setMedias(picUrls);
-        return this.quanZiApi.savePublish(publish);
+        String publishId = this.quanZiApi.savePublish(publish);
+
+        if(StrUtil.isNotEmpty(publishId)){
+            //发送消息
+            this.quanziMQService.publishMsg(publishId);
+        }
+
+        return publishId;
     }
 
     public PageResult queryRecommendPublishList(Integer page, Integer pageSize) {
@@ -211,6 +222,9 @@ public class QuanZiService {
 
         Boolean result = this.quanZiApi.likeComment(user.getId(), publishId);
         if (result){
+            //发消息
+            this.quanziMQService.likePublishMsg(publishId);
+
             //查询点赞数
             return this.quanZiApi.queryLikeCount(publishId);
         }
@@ -228,6 +242,8 @@ public class QuanZiService {
 
         Boolean result = this.quanZiApi.disLikeComment(user.getId(), publishId);
         if (result){
+            //发消息
+            this.quanziMQService.disLikePublishMsg(publishId);
             //查询点赞数
             return this.quanZiApi.queryLikeCount(publishId);
         }
@@ -239,6 +255,8 @@ public class QuanZiService {
         //喜欢
         Boolean result = this.quanZiApi.loveComment(user.getId(), publishId);
         if(result){
+            //发消息
+            this.quanziMQService.lovePublishMsg(publishId);
             //查询喜欢数
             return this.quanZiApi.queryLoveCount(publishId);
         }
@@ -250,6 +268,8 @@ public class QuanZiService {
         //取消喜欢
         Boolean result = this.quanZiApi.disLoveComment(user.getId(), publishId);
         if(result){
+            //发消息
+            this.quanziMQService.disLovePublishMsg(publishId);
             //查询喜欢数
             return this.quanZiApi.queryLoveCount(publishId);
         }
@@ -261,6 +281,9 @@ public class QuanZiService {
         if (publish == null) {
             return null;
         }
+        //发消息
+        this.quanziMQService.queryPublishMsg(publishId);
+
         return this.fillQuanZiVo(Arrays.asList(publish)).get(0);
     }
 
@@ -322,8 +345,12 @@ public class QuanZiService {
      */
     public Boolean saveComments(String publishId, String content) {
         User user = UserThreadLocal.get();
-
-        return this.quanZiApi.saveComment(user.getId(),publishId,content);
+        Boolean result = this.quanZiApi.saveComment(user.getId(), publishId, content);
+        if(result){
+            //发消息
+            this.quanziMQService.commentPublishMsg(publishId);
+        }
+        return result;
     }
 
     public PageResult queryAlbumList(Long userId, Integer page, Integer pageSize) {

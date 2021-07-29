@@ -1,5 +1,6 @@
 package com.tanhua.sso.service;
 
+import cn.hutool.core.util.ObjectUtil;
 import com.alibaba.dubbo.config.annotation.Reference;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.tanhua.common.mapper.UserMapper;
@@ -159,5 +160,23 @@ public class UserService {
     @GetMapping("visitors")
     public ResponseEntity<Object> queryVisitors() {
         return ResponseEntity.ok(Collections.EMPTY_LIST);
+    }
+
+
+    public Boolean updatePhone(Long userId, String newPhone) {
+        //先查询新手机号是否已经注册，如果已经注册，就不能修改
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("mobile", newPhone);
+        User user = this.userMapper.selectOne(queryWrapper);
+        if(ObjectUtil.isNotEmpty(user)){
+            //新手机号已经被注册
+            return false;
+        }
+
+        user = new User();
+        user.setId(userId);
+        user.setMobile(newPhone);
+
+        return this.userMapper.updateById(user) > 0;
     }
 }

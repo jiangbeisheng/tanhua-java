@@ -1,7 +1,11 @@
 package com.tanhua.server.service;
 
+import com.alibaba.dubbo.config.annotation.Reference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tanhua.common.pojo.User;
+import com.tanhua.common.utils.UserThreadLocal;
+import com.tanhua.dubbo.server.api.UserLikeApi;
+import com.tanhua.server.vo.CountsVo;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +28,7 @@ public class UserService {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+
     /**
      * 通过sso接口查询
      * @param token
@@ -44,4 +49,5 @@ public class UserService {
         }
         return null;
     }
+
 }

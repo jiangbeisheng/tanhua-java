@@ -1,6 +1,7 @@
 package com.tanhua.dubbo.server.api;
 
 import com.tanhua.dubbo.server.pojo.Visitors;
+import com.tanhua.dubbo.server.vo.PageInfo;
 
 import java.util.List;
 
@@ -25,6 +26,18 @@ public interface VisitorsApi {
      * @return
      */
     List<Visitors> queryMyVisitor(Long userId);
+
+    //com.tanhua.dubbo.server.api.VisitorsApi
+
+    /**
+     * 按照时间倒序排序，查询最近的访客信息
+     *
+     * @param userId
+     * @param page
+     * @param pageSize
+     * @return
+     */
+    PageInfo<Visitors> topVisitor(Long userId, Integer page, Integer pageSize);
 
 }
 

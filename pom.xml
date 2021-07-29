@@ -13,6 +13,7 @@
         <module>my-tanhua-common</module>
         <module>my-tanhua-dubbo/my-tanhua-dubbo-huanxin</module>
         <module>my-tanhua-dubbo/my-tanhua-dubbo-es</module>
+        <module>my-tanhua-recommend</module>
     </modules>
 
     <parent>

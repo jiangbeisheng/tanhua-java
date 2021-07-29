@@ -53,6 +53,9 @@ public class VideoService {
     @Autowired
     private QuanZiService quanZiService;
 
+    @Autowired
+    private VideoMQService videoMQService;
+
     /**
      * 小视频上传
      *
@@ -81,6 +84,10 @@ public class VideoService {
             video.setVideoUrl(fdfsWebServer.getWebServerUrl() + storePath.getFullPath());
 
             String videoId = this.videoApi.saveVideo(video);
+            if (StrUtil.isNotEmpty(videoId)){
+                //发送消息
+                this.videoMQService.videoMsg(videoId);
+            }
             return StrUtil.isNotEmpty(videoId);
         } catch (IOException e) {
             log.error("上传小视频出错 userId = " + user.getId() + ",file = " + videoFile.getOriginalFilename(), e);
@@ -138,7 +145,7 @@ public class VideoService {
     }
 
     /**
-     * 取消点赞
+     * 点赞
      *
      * @param videoId
      * @return
@@ -148,12 +155,16 @@ public class VideoService {
 
         Boolean result = this.quanZiApi.likeComment(user.getId(), videoId);
         if (result) {
+            //发送消息
+            this.videoMQService.likeVideoMsg(videoId);
             return this.quanZiApi.queryLikeCount(videoId);
         }
         return null;
     }
 
     /**
+     * 取消点赞
+     *
      * @param videoId
      * @return
      */
@@ -162,13 +173,22 @@ public class VideoService {
 
         Boolean result = this.quanZiApi.disLikeComment(user.getId(), videoId);
         if (result) {
+            //发送消息
+            this.videoMQService.disLikeVideoMsg(videoId);
             return this.quanZiApi.queryLikeCount(videoId);
         }
         return null;
     }
 
     public Boolean saveComment(String videoId, String content) {
-        return this.quanZiService.saveComments(videoId, content);
+        Boolean result = this.quanZiService.saveComments(videoId, content);
+
+        if(result){
+            //发送消息
+            this.videoMQService.commentVideoMsg(videoId);
+        }
+
+        return result;
     }
 
     public PageResult queryCommentList(String videoId, Integer page, Integer pageSize) {
